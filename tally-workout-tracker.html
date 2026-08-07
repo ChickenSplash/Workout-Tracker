@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en-GB" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Tally — daily training log</title>
+<style>
+/* ============================================================
+   TOKENS
+   Light is the base; dark comes from system preference or the
+   manual override on <html data-theme>.
+   ============================================================ */
+:root{
+  --paper:      #f7f4ee;
+  --surface:    #fffdf8;
+  --rule:       #ddd7ca;
+  --rule-soft:  #e8e3d8;
+  --ink:        #1b1d21;
+  --ink-soft:   #6d6c68;
+  --ink-faint:  #a5a29a;
+  --accent:     #e0a400;
+  --accent-fill:#ffd23f;
+  --on-accent:  #1b1d21;
+  --mark:       rgba(255,210,63,.62);
+  --mark-part:  rgba(255,210,63,.26);
+  --shadow:     0 1px 0 rgba(27,29,33,.05);
+
+  --f-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --f-sans: system-ui, -apple-system, "Segoe UI", Inter, "Noto Sans", Helvetica, Arial, sans-serif;
+
+  --gap: 1.25rem;
+  --radius: 4px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:      #15171b;
+    --surface:    #1c1f25;
+    --rule:       #2e333c;
+    --rule-soft:  #24282f;
+    --ink:        #ece9e3;
+    --ink-soft:   #9298a3;
+    --ink-faint:  #656b76;
+    --accent:     #ffd23f;
+    --accent-fill:#ffd23f;
+    --on-accent:  #15171b;
+    --mark:       rgba(255,210,63,.17);
+    --mark-part:  rgba(255,210,63,.07);
+    --shadow:     none;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:      #15171b;
+  --surface:    #1c1f25;
+  --rule:       #2e333c;
+  --rule-soft:  #24282f;
+  --ink:        #ece9e3;
+  --ink-soft:   #9298a3;
+  --ink-faint:  #656b76;
+  --accent:     #ffd23f;
+  --accent-fill:#ffd23f;
+  --on-accent:  #15171b;
+  --mark:       rgba(255,210,63,.17);
+  --mark-part:  rgba(255,210,63,.07);
+  --shadow:     none;
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--f-sans);
+  font-size:16px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select{ font:inherit; color:inherit; }
+button{ background:none; border:0; cursor:pointer; }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:2px; }
+
+/* Mono = anything measured. Sans = anything named. */
+.mono{ font-family:var(--f-mono); font-variant-numeric:tabular-nums; }
+.eyebrow{
+  font-family:var(--f-mono);
+  font-size:.6875rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+}
+
+.wrap{ max-width:46rem; margin:0 auto; padding:0 1.125rem 5rem; }
+
+/* ============================================================
+   HEADER + TABS
+   ============================================================ */
+.topbar{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:1rem; padding:1.75rem 0 1rem;
+}
+.wordmark{
+  font-family:var(--f-mono);
+  font-size:1.0625rem; font-weight:700;
+  letter-spacing:.34em; text-transform:uppercase;
+  margin:0;
+}
+.wordmark span{ color:var(--accent); }
+.themebtn{
+  font-family:var(--f-mono); font-size:.6875rem;
+  letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-soft); padding:.3rem .5rem;
+  border:1px solid var(--rule); border-radius:var(--radius);
+}
+.themebtn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+
+.tabs{
+  display:flex; gap:.25rem;
+  border-bottom:1px solid var(--rule);
+  margin-bottom:1.75rem;
+}
+.tab{
+  position:relative;
+  font-family:var(--f-mono); font-size:.75rem;
+  letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-faint);
+  padding:.7rem .85rem .8rem;
+}
+.tab:hover{ color:var(--ink-soft); }
+.tab[aria-selected="true"]{ color:var(--ink); }
+.tab[aria-selected="true"]::after{
+  content:""; position:absolute; left:.85rem; right:.85rem; bottom:-1px;
+  height:2px; background:var(--accent);
+}
+.tab .count{ color:var(--ink-faint); margin-left:.4em; }
+
+.panel[hidden]{ display:none; }
+.lede{ color:var(--ink-soft); margin:0 0 1.75rem; max-width:34rem; font-size:.9375rem; }
+
+/* ============================================================
+   ROWS — the ledger. Hairline rules, no cards, no shadows.
+   ============================================================ */
+.group{ margin:0 0 2.25rem; }
+.group-head{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:1rem; padding-bottom:.5rem; border-bottom:1px solid var(--rule);
+}
+.group-head h2{ margin:0; font-size:.6875rem; font-family:var(--f-mono);
+  letter-spacing:.14em; text-transform:uppercase; font-weight:600; }
+.group-head .on{ font-family:var(--f-mono); font-size:.6875rem; color:var(--ink-faint); font-variant-numeric:tabular-nums; }
+
+.rows{ list-style:none; margin:0; padding:0; }
+.row{
+  position:relative; isolation:isolate;
+  display:grid; align-items:center;
+  grid-template-columns:auto 1fr minmax(9.5rem,13rem);
+  gap:.75rem 1rem;
+  padding:.7rem .25rem;
+  border-bottom:1px solid var(--rule-soft);
+}
+.row > *{ position:relative; z-index:1; }
+/* Signature: ticking a row swipes a highlighter band across it. */
+.row::before{
+  content:""; position:absolute; z-index:0;
+  left:-.4rem; right:-.4rem; top:.28rem; bottom:.28rem;
+  background:var(--mark);
+  border-radius:3px 9px 4px 8px / 9px 4px 10px 5px;
+  transform:scaleX(0) rotate(-.25deg); transform-origin:left center;
+  transition:transform .3s cubic-bezier(.2,.75,.3,1);
+}
+.row.is-done::before{ transform:scaleX(1) rotate(-.25deg); }
+.row.is-part::before{ background:var(--mark-part); transform:scaleX(1) rotate(-.25deg); }
+
+.ex-name{ font-size:.9375rem; }
+.row.is-done .ex-name{ font-weight:600; }
+.ex-sub{ display:block; font-family:var(--f-mono); font-size:.6875rem; color:var(--ink-faint); letter-spacing:.04em; }
+.row.is-off .ex-name{ color:var(--ink-soft); }
+
+/* the mark box */
+.mark{
+  width:1.5rem; height:1.5rem; flex:none;
+  border:1.5px solid var(--rule); border-radius:3px;
+  display:grid; place-items:center; background:var(--surface);
+  transition:border-color .15s, background .15s;
+}
+.mark:hover{ border-color:var(--ink-faint); }
+.mark svg{ width:1rem; height:1rem; fill:none; stroke:var(--on-accent);
+  stroke-width:3; stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:26; stroke-dashoffset:26; transition:stroke-dashoffset .22s ease .04s; }
+.mark[data-state="done"]{ background:var(--accent-fill); border-color:var(--accent-fill); }
+.mark[data-state="done"] svg{ stroke-dashoffset:0; }
+.mark[data-state="part"]{ border-color:var(--accent); }
+.mark[data-state="part"]::after{
+  content:""; width:.6rem; height:.15rem; border-radius:1px; background:var(--accent);
+  position:absolute;
+}
+.mark{ position:relative; }
+
+/* amount control */
+.setter{ display:flex; align-items:center; gap:.65rem; justify-self:end; width:100%; }
+.amount{ font-family:var(--f-mono); font-size:.8125rem; font-variant-numeric:tabular-nums;
+  white-space:nowrap; text-align:right; min-width:4.75rem; }
+.amount .u{ color:var(--ink-faint); }
+
+input[type="range"]{
+  -webkit-appearance:none; appearance:none; width:100%; background:transparent; margin:0; cursor:pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track{ height:2px; background:var(--rule); }
+input[type="range"]::-moz-range-track{ height:2px; background:var(--rule); }
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:.75rem; height:1.15rem; margin-top:-.55rem;
+  background:var(--ink); border:0; border-radius:2px;
+}
+input[type="range"]::-moz-range-thumb{ width:.75rem; height:1.15rem; background:var(--ink); border:0; border-radius:2px; }
+input[type="range"]:disabled::-webkit-slider-thumb{ background:var(--rule); }
+input[type="range"]:disabled::-moz-range-thumb{ background:var(--rule); }
+input[type="range"]:disabled{ cursor:default; }
+
+/* ============================================================
+   TODAY
+   ============================================================ */
+.daybar{
+  display:flex; align-items:center; gap:.5rem;
+  border-bottom:1px solid var(--rule); padding-bottom:.85rem; margin-bottom:1.5rem;
+}
+.stepbtn{
+  width:2rem; height:2rem; border:1px solid var(--rule); border-radius:var(--radius);
+  display:grid; place-items:center; color:var(--ink-soft); font-size:1rem; line-height:1;
+}
+.stepbtn:hover:not(:disabled){ color:var(--ink); border-color:var(--ink-faint); }
+.stepbtn:disabled{ opacity:.35; cursor:default; }
+.daylabel{ flex:1; text-align:center; }
+.daylabel .dow{ display:block; font-size:1.0625rem; font-weight:600; letter-spacing:-.01em; }
+.daylabel .dat{ display:block; font-family:var(--f-mono); font-size:.6875rem;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); }
+.jump{ font-family:var(--f-mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-soft); border:1px solid var(--rule); border-radius:var(--radius); padding:.35rem .5rem; }
+.jump:disabled{ opacity:.3; cursor:default; }
+
+.score{ display:flex; align-items:flex-end; gap:1rem; margin-bottom:.6rem; }
+.score .n{ font-family:var(--f-mono); font-size:2.75rem; line-height:.9; font-weight:700;
+  font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.score .n .of{ color:var(--ink-faint); font-weight:400; }
+.score .note{ font-family:var(--f-mono); font-size:.6875rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-faint); padding-bottom:.3rem; }
+.segbar{ display:flex; gap:3px; margin-bottom:2rem; }
+.segbar i{ flex:1; height:6px; background:var(--rule); border-radius:1px; transition:background .2s; }
+.segbar i[data-state="done"]{ background:var(--accent-fill); }
+.segbar i[data-state="part"]{ background:var(--accent); opacity:.4; }
+
+/* ============================================================
+   HISTORY
+   ============================================================ */
+.stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+  background:var(--rule); border:1px solid var(--rule); border-radius:var(--radius);
+  overflow:hidden; margin-bottom:2.25rem; }
+.stat{ background:var(--paper); padding:.9rem .9rem 1rem; }
+.stat .v{ font-family:var(--f-mono); font-size:1.75rem; font-weight:700; line-height:1;
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; display:block; margin-bottom:.35rem; }
+.stat .k{ font-family:var(--f-mono); font-size:.625rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-faint); }
+
+.month{ font-family:var(--f-mono); font-size:.6875rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint); padding:1.5rem 0 .5rem; border-bottom:1px solid var(--rule); }
+.month:first-child{ padding-top:0; }
+.dayrow{
+  display:grid; grid-template-columns:5.25rem 1fr auto; align-items:center; gap:1rem;
+  padding:.6rem .25rem; border-bottom:1px solid var(--rule-soft);
+}
+.dayrow.is-today{ background:var(--surface); }
+.dayrow .d{ font-family:var(--f-mono); font-size:.75rem; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-soft); }
+.dayrow.is-today .d{ color:var(--ink); font-weight:700; }
+.pips{ display:flex; flex-wrap:wrap; gap:4px; }
+.pip{ width:11px; height:11px; border-radius:2px; border:1.5px solid var(--rule); }
+.pip[data-state="done"]{ background:var(--accent-fill); border-color:var(--accent-fill); }
+.pip[data-state="part"]{ border-color:var(--accent); }
+.dayrow .pct{ font-family:var(--f-mono); font-size:.75rem; font-variant-numeric:tabular-nums;
+  color:var(--ink-faint); min-width:2.75rem; text-align:right; }
+.dayrow.is-full .pct{ color:var(--ink); font-weight:700; }
+
+/* ============================================================
+   FORMS / EMPTY / FOOTER
+   ============================================================ */
+.addbox{ border:1px dashed var(--rule); border-radius:var(--radius); padding:1.1rem; margin-top:.5rem; }
+.addbox h2{ margin:0 0 .9rem; font-size:.6875rem; font-family:var(--f-mono);
+  letter-spacing:.14em; text-transform:uppercase; font-weight:600; }
+.fields{ display:flex; flex-wrap:wrap; gap:.6rem; }
+.field{ display:flex; flex-direction:column; gap:.3rem; }
+.field label{ font-family:var(--f-mono); font-size:.625rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-faint); }
+.field input,.field select{
+  background:var(--surface); border:1px solid var(--rule); border-radius:var(--radius);
+  padding:.45rem .55rem; min-width:0;
+}
+.field input[type="text"]{ width:12rem; }
+.field input[type="number"]{ width:5.5rem; font-family:var(--f-mono); }
+.field select{ width:7rem; }
+.btn{
+  align-self:flex-end; background:var(--accent-fill); color:var(--on-accent);
+  font-family:var(--f-mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase;
+  font-weight:700; padding:.55rem .85rem; border-radius:var(--radius);
+}
+.btn:hover{ filter:brightness(1.06); }
+.btn.ghost{ background:none; color:var(--ink-soft); border:1px solid var(--rule); font-weight:400; }
+.btn.ghost:hover{ color:var(--ink); border-color:var(--ink-faint); }
+
+.empty{ border:1px dashed var(--rule); border-radius:var(--radius);
+  padding:2.5rem 1.25rem; text-align:center; color:var(--ink-soft); }
+.empty p{ margin:0 0 1rem; }
+
+.footer{ display:flex; gap:.5rem; justify-content:flex-end; margin-top:2.5rem;
+  padding-top:1.25rem; border-top:1px solid var(--rule); }
+.footer .btn{ align-self:auto; }
+
+.remove{ color:var(--ink-faint); font-family:var(--f-mono); font-size:1rem; line-height:1;
+  padding:.25rem .35rem; border-radius:2px; }
+.remove:hover{ color:var(--ink); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:34rem){
+  .row{ grid-template-columns:auto 1fr; }
+  .setter{ grid-column:1 / -1; justify-self:stretch; }
+  .dayrow{ grid-template-columns:4.5rem 1fr auto; gap:.7rem; }
+  .stats{ grid-template-columns:1fr 1fr 1fr; }
+  .stat .v{ font-size:1.375rem; }
+  .score .n{ font-size:2.25rem; }
+  .wordmark{ letter-spacing:.24em; }
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ transition-duration:.01ms !important; animation-duration:.01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <h1 class="wordmark">Tall<span>y</span></h1>
+    <button class="themebtn" id="themeBtn" title="Switch theme">Theme: System</button>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="tab-plan" aria-controls="panel-plan" aria-selected="true">Plan <span class="count" id="planCount"></span></button>
+    <button class="tab" role="tab" id="tab-today" aria-controls="panel-today" aria-selected="false">Today</button>
+    <button class="tab" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false">History</button>
+  </nav>
+
+  <!-- ── PLAN ────────────────────────────────────────────── -->
+  <section class="panel" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+    <p class="lede">Choose what counts as a full day, then set the target for each one. You can change targets any time — past days keep the target they were logged against.</p>
+    <div id="planGroups"></div>
+
+    <div class="addbox">
+      <h2>Add your own</h2>
+      <div class="fields">
+        <div class="field">
+          <label for="cName">Exercise</label>
+          <input type="text" id="cName" placeholder="Farmer's walk" maxlength="40">
+        </div>
+        <div class="field">
+          <label for="cUnit">Unit</label>
+          <select id="cUnit"></select>
+        </div>
+        <div class="field">
+          <label for="cTarget">Target</label>
+          <input type="number" id="cTarget" value="10" min="0" step="1">
+        </div>
+        <button class="btn" id="cAdd">Add exercise</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button class="btn ghost" id="exportBtn">Export data</button>
+      <button class="btn ghost" id="clearBtn">Clear all data</button>
+    </div>
+  </section>
+
+  <!-- ── TODAY ───────────────────────────────────────────── -->
+  <section class="panel" id="panel-today" role="tabpanel" aria-labelledby="tab-today" hidden>
+    <div class="daybar">
+      <button class="stepbtn" id="prevDay" aria-label="Previous day">‹</button>
+      <div class="daylabel">
+        <span class="dow" id="dayDow">—</span>
+        <span class="dat" id="dayDate">—</span>
+      </div>
+      <button class="stepbtn" id="nextDay" aria-label="Next day">›</button>
+      <button class="jump" id="jumpToday">Today</button>
+    </div>
+    <div id="todayBody"></div>
+  </section>
+
+  <!-- ── HISTORY ─────────────────────────────────────────── -->
+  <section class="panel" id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <div class="stats">
+      <div class="stat"><span class="v" id="statStreak">0</span><span class="k">Day streak</span></div>
+      <div class="stat"><span class="v" id="statBest">0</span><span class="k">Best streak</span></div>
+      <div class="stat"><span class="v" id="statDays">0</span><span class="k">Days logged</span></div>
+    </div>
+    <div id="historyBody"></div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ============================================================
+   1. STORAGE — works as a Claude artifact, as a local file,
+   and falls back to memory if both are blocked.
+   ============================================================ */
+const Store = (() => {
+  const mem = {};
+  const hasArtifact = typeof window.storage !== "undefined" && window.storage;
+  let hasLS = false;
+  try { localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); hasLS = true; } catch (e) { hasLS = false; }
+
+  return {
+    async get(key){
+      if (hasArtifact){
+        try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; }
+        catch(e){ return null; }
+      }
+      if (hasLS){
+        try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch(e){ return null; }
+      }
+      return mem[key] ?? null;
+    },
+    async set(key, val){
+      const s = JSON.stringify(val);
+      if (hasArtifact){ try { await window.storage.set(key, s); return; } catch(e){ /* fall through */ } }
+      if (hasLS){ try { localStorage.setItem(key, s); return; } catch(e){ /* fall through */ } }
+      mem[key] = val;
+    },
+    async clear(){
+      for (const k of ["tally.plan","tally.log","tally.theme"]){
+        if (hasArtifact){ try { await window.storage.delete(k); } catch(e){} }
+        if (hasLS){ try { localStorage.removeItem(k); } catch(e){} }
+        delete mem[k];
+      }
+    }
+  };
+})();
+
+/* ============================================================
+   2. UNITS + PRESET LIBRARY
+   ============================================================ */
+const UNITS = {
+  reps:  { label:"reps",  min:1,   max:200,   step:1,   dp:0 },
+  sets:  { label:"sets",  min:1,   max:12,    step:1,   dp:0 },
+  s:     { label:"sec",   min:5,   max:300,   step:5,   dp:0 },
+  min:   { label:"min",   min:5,   max:180,   step:5,   dp:0 },
+  h:     { label:"hrs",   min:3,   max:12,    step:.5,  dp:1 },
+  km:    { label:"km",    min:1,   max:100,   step:.5,  dp:1 },
+  steps: { label:"steps", min:1000,max:30000, step:500, dp:0 },
+  L:     { label:"litres",min:.5,  max:6,     step:.1,  dp:1 },
+  g:     { label:"g",     min:20,  max:300,   step:5,   dp:0 },
+  x:     { label:"times", min:1,   max:20,    step:1,   dp:0 }
+};
+
+const PRESETS = [
+  // Bodyweight
+  ["pushups",    "Push-ups",         "Bodyweight", "reps", 20],
+  ["pullups",    "Pull-ups",         "Bodyweight", "reps", 5],
+  ["situps",     "Sit-ups",          "Bodyweight", "reps", 30],
+  ["squats",     "Bodyweight squats","Bodyweight", "reps", 30],
+  ["lunges",     "Lunges",           "Bodyweight", "reps", 20],
+  ["dips",       "Tricep dips",      "Bodyweight", "reps", 10],
+  ["burpees",    "Burpees",          "Bodyweight", "reps", 10],
+  ["plank",      "Plank hold",       "Bodyweight", "s",    60],
+  ["wallsit",    "Wall sit",         "Bodyweight", "s",    45],
+  ["jacks",      "Jumping jacks",    "Bodyweight", "reps", 50],
+  ["climbers",   "Mountain climbers","Bodyweight", "reps", 40],
+  ["legraises",  "Leg raises",       "Bodyweight", "reps", 15],
+  ["bridges",    "Glute bridges",    "Bodyweight", "reps", 20],
+  ["calfraises", "Calf raises",      "Bodyweight", "reps", 25],
+  // Weights
+  ["bench",      "Bench press",      "Weights", "sets", 3],
+  ["deadlift",   "Deadlift",         "Weights", "sets", 3],
+  ["ohp",        "Overhead press",   "Weights", "sets", 3],
+  ["row",        "Barbell row",      "Weights", "sets", 3],
+  ["curls",      "Bicep curls",      "Weights", "sets", 3],
+  ["kbswings",   "Kettlebell swings","Weights", "reps", 30],
+  // Cardio
+  ["jogging",    "Jogging",          "Cardio", "min",   30],
+  ["walking",    "Walking",          "Cardio", "steps", 8000],
+  ["cycling",    "Cycling",          "Cardio", "km",    10],
+  ["swimming",   "Swimming",         "Cardio", "min",   30],
+  ["rowing",     "Rowing machine",   "Cardio", "min",   20],
+  ["skipping",   "Skipping rope",    "Cardio", "min",   10],
+  ["stairs",     "Stair climbing",   "Cardio", "min",   15],
+  // Recovery & habits
+  ["stretch",    "Stretching",       "Recovery & habits", "min", 10],
+  ["yoga",       "Yoga",             "Recovery & habits", "min", 20],
+  ["foamroll",   "Foam rolling",     "Recovery & habits", "min", 10],
+  ["meditate",   "Meditation",       "Recovery & habits", "min", 10],
+  ["water",      "Water",            "Recovery & habits", "L",   2.5],
+  ["sleep",      "Sleep",            "Recovery & habits", "h",   8],
+  ["protein",    "Protein",          "Recovery & habits", "g",   120],
+  ["weighin",    "Weigh-in",         "Recovery & habits", "x",   1]
+].map(([id,name,cat,unit,target]) => ({ id, name, cat, unit, target }));
+
+const CATS = ["Bodyweight","Weights","Cardio","Recovery & habits","Your own"];
+
+/* ============================================================
+   3. STATE
+   plan[id] = { id, name, unit, target, cat, custom }
+   log["YYYY-MM-DD"][id] = { v: doneAmount, t: targetAtTheTime }
+   ============================================================ */
+let plan = {};
+let log  = {};
+let theme = "system";
+let viewDate = todayISO();
+let activeTab = "plan";
+
+/* ── date helpers ───────────────────────────────────────── */
+function iso(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function todayISO(){ return iso(new Date()); }
+function fromISO(s){ const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+function shift(s, days){ const d = fromISO(s); d.setDate(d.getDate()+days); return iso(d); }
+const DOW  = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const DOW3 = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MON  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MON3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function fmt(v, unit){
+  const u = UNITS[unit];
+  const n = u.dp ? Number(v).toFixed(u.dp).replace(/\.0$/,"") : Math.round(v);
+  return (unit === "steps") ? Number(n).toLocaleString("en-GB") : String(n);
+}
+
+/* ── day maths ──────────────────────────────────────────── */
+// Returns the set of items relevant to a date: everything in the plan now,
+// plus anything that was logged that day but has since left the plan.
+function itemsFor(date){
+  const day = log[date] || {};
+  const out = [];
+  const seen = new Set();
+  for (const id of Object.keys(plan)){
+    const p = plan[id], e = day[id];
+    out.push({ id, name:p.name, unit:p.unit, target: e ? e.t : p.target, value: e ? e.v : 0 });
+    seen.add(id);
+  }
+  for (const id of Object.keys(day)){
+    if (seen.has(id)) continue;
+    const e = day[id];
+    const known = PRESETS.find(p => p.id === id);
+    out.push({ id, name: e.n || (known ? known.name : id), unit: e.u || (known ? known.unit : "reps"),
+               target: e.t, value: e.v, retired:true });
+  }
+  return out;
+}
+function stateOf(it){
+  if (it.value >= it.target && it.target > 0) return "done";
+  if (it.value > 0) return "part";
+  return "todo";
+}
+function scoreFor(date){
+  const items = itemsFor(date);
+  const done = items.filter(i => stateOf(i) === "done").length;
+  return { done, total: items.length, items };
+}
+
+/* ── streaks ────────────────────────────────────────────── */
+function isFullDay(date){
+  const s = scoreFor(date);
+  return s.total > 0 && s.done === s.total;
+}
+function computeStreaks(){
+  const days = Object.keys(log).sort();
+  if (!days.length) return { current:0, best:0, logged:0 };
+  // current: count back from today; a not-yet-finished today doesn't break it
+  let cur = 0, cursor = todayISO();
+  if (!isFullDay(cursor)) cursor = shift(cursor, -1);
+  while (isFullDay(cursor)){ cur++; cursor = shift(cursor, -1); }
+  // best: walk every logged day range
+  let best = 0, run = 0, prev = null;
+  for (const d of days){
+    if (!isFullDay(d)){ run = 0; prev = d; continue; }
+    run = (prev && shift(prev,1) === d && run > 0) ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = d;
+  }
+  if (cur > best) best = cur;
+  const logged = days.filter(d => Object.values(log[d]).some(e => e.v > 0)).length;
+  return { current:cur, best, logged };
+}
+
+/* ============================================================
+   4. PERSISTENCE
+   ============================================================ */
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { Store.set("tally.plan", plan); Store.set("tally.log", log); }, 200);
+}
+
+/* ============================================================
+   5. RENDER — PLAN
+   ============================================================ */
+const $ = sel => document.querySelector(sel);
+const planGroups = $("#planGroups");
+
+function renderPlan(){
+  planGroups.innerHTML = "";
+  const customs = Object.values(plan).filter(p => p.custom);
+
+  for (const cat of CATS){
+    const presets = PRESETS.filter(p => p.cat === cat);
+    const list = cat === "Your own" ? customs : presets;
+    if (!list.length) continue;
+
+    const on = list.filter(p => plan[p.id]).length;
+    const sec = document.createElement("section");
+    sec.className = "group";
+    sec.innerHTML = `<div class="group-head"><h2>${cat}</h2><span class="on">${on}/${list.length} on</span></div>`;
+    const ul = document.createElement("ul");
+    ul.className = "rows";
+
+    for (const item of list){
+      const active = !!plan[item.id];
+      const unit = active ? plan[item.id].unit : item.unit;
+      const target = active ? plan[item.id].target : item.target;
+      const u = UNITS[unit];
+
+      const li = document.createElement("li");
+      li.className = "row" + (active ? " is-done" : " is-off");
+      li.innerHTML = `
+        <button class="mark" data-state="${active ? "done" : "todo"}" aria-pressed="${active}"
+                aria-label="${active ? "Remove" : "Add"} ${item.name}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.8 9.5 18.5 20 6"/></svg>
+        </button>
+        <div>
+          <span class="ex-name">${item.name}</span>
+          ${item.custom ? `<span class="ex-sub">custom</span>` : ``}
+        </div>
+        <div class="setter">
+          <input type="range" min="${u.min}" max="${Math.max(u.max, target)}" step="${u.step}"
+                 value="${target}" ${active ? "" : "disabled"} aria-label="${item.name} target">
+          <span class="amount">${fmt(target, unit)} <span class="u">${u.label}</span></span>
+        </div>
+        ${item.custom ? `<button class="remove" title="Delete ${item.name}" aria-label="Delete ${item.name}">×</button>` : ``}
+      `;
+
+      li.querySelector(".mark").addEventListener("click", () => {
+        if (plan[item.id]) delete plan[item.id];
+        else plan[item.id] = { id:item.id, name:item.name, unit, target, cat:item.cat, custom:!!item.custom };
+        save(); renderPlan(); renderTabs();
+      });
+
+      const range = li.querySelector("input[type=range]");
+      const amount = li.querySelector(".amount");
+      range.addEventListener("input", () => {
+        const v = Number(range.value);
+        amount.innerHTML = `${fmt(v, unit)} <span class="u">${u.label}</span>`;
+        if (plan[item.id]){ plan[item.id].target = v; save(); }
+      });
+
+      const rm = li.querySelector(".remove");
+      if (rm) rm.addEventListener("click", () => {
+        if (!confirm(`Delete “${item.name}” from your plan? Logged days keep their record.`)) return;
+        delete plan[item.id]; save(); renderPlan(); renderTabs();
+      });
+
+      ul.appendChild(li);
+    }
+    sec.appendChild(ul);
+    planGroups.appendChild(sec);
+  }
+}
+
+/* ============================================================
+   6. RENDER — TODAY
+   ============================================================ */
+const todayBody = $("#todayBody");
+
+function renderToday(){
+  const d = fromISO(viewDate);
+  $("#dayDow").textContent = viewDate === todayISO() ? "Today" : DOW[d.getDay()];
+  $("#dayDate").textContent = `${DOW3[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+  $("#nextDay").disabled = viewDate >= todayISO();
+  $("#jumpToday").disabled = viewDate === todayISO();
+
+  const { done, total, items } = scoreFor(viewDate);
+
+  if (!total){
+    todayBody.innerHTML = `<div class="empty"><p>Nothing to tick off yet.</p><button class="btn" id="goPlan">Set up your plan</button></div>`;
+    $("#goPlan").addEventListener("click", () => selectTab("plan"));
+    return;
+  }
+
+  todayBody.innerHTML = `
+    <div class="score">
+      <span class="n">${done}<span class="of">/${total}</span></span>
+      <span class="note">${done === total ? "full day" : "done"}</span>
+    </div>
+    <div class="segbar" id="segbar" aria-hidden="true"></div>
+    <ul class="rows" id="logRows"></ul>`;
+
+  const seg = $("#segbar");
+  const ul = $("#logRows");
+
+  for (const it of items){
+    const u = UNITS[it.unit];
+    const st = stateOf(it);
+
+    const pip = document.createElement("i");
+    pip.dataset.state = st;
+    seg.appendChild(pip);
+
+    const li = document.createElement("li");
+    li.className = "row" + (st === "done" ? " is-done" : st === "part" ? " is-part" : "");
+    li.innerHTML = `
+      <button class="mark" data-state="${st}" aria-pressed="${st === "done"}" aria-label="Mark ${it.name} done">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.8 9.5 18.5 20 6"/></svg>
+      </button>
+      <div>
+        <span class="ex-name">${it.name}</span>
+        <span class="ex-sub">target ${fmt(it.target, it.unit)} ${u.label}${it.retired ? " · removed from plan" : ""}</span>
+      </div>
+      <div class="setter">
+        <input type="range" min="0" max="${Math.max(u.max, it.target)}" step="${u.step}" value="${it.value}"
+               aria-label="${it.name} amount done">
+        <span class="amount">${fmt(it.value, it.unit)} <span class="u">${u.label}</span></span>
+      </div>`;
+
+    const range = li.querySelector("input[type=range]");
+    const amount = li.querySelector(".amount");
+
+    function write(v, redraw){
+      if (!log[viewDate]) log[viewDate] = {};
+      if (v <= 0 && !log[viewDate][it.id]) { /* nothing to store */ }
+      log[viewDate][it.id] = { v, t: it.target, n: it.name, u: it.unit };
+      if (v <= 0) delete log[viewDate][it.id];
+      if (!Object.keys(log[viewDate]).length) delete log[viewDate];
+      save();
+      if (redraw) renderToday(); else { renderTabs(); }
+    }
+
+    li.querySelector(".mark").addEventListener("click", () => {
+      write(stateOf(it) === "done" ? 0 : it.target, true);
+    });
+    range.addEventListener("input", () => {
+      const v = Number(range.value);
+      amount.innerHTML = `${fmt(v, it.unit)} <span class="u">${u.label}</span>`;
+      const s = v >= it.target && it.target > 0 ? "done" : v > 0 ? "part" : "todo";
+      li.className = "row" + (s === "done" ? " is-done" : s === "part" ? " is-part" : "");
+      li.querySelector(".mark").dataset.state = s;
+      pip.dataset.state = s;
+    });
+    range.addEventListener("change", () => { it.value = Number(range.value); write(Number(range.value), true); });
+
+    ul.appendChild(li);
+  }
+}
+
+/* ============================================================
+   7. RENDER — HISTORY
+   ============================================================ */
+const historyBody = $("#historyBody");
+
+function renderHistory(){
+  const s = computeStreaks();
+  $("#statStreak").textContent = s.current;
+  $("#statBest").textContent = s.best;
+  $("#statDays").textContent = s.logged;
+
+  const today = todayISO();
+  const logged = Object.keys(log).sort();
+  let start = shift(today, -13);                       // always show a fortnight
+  if (logged.length && logged[0] < start) start = logged[0];
+  const floor = shift(today, -89);                     // …but never more than 90 days
+  if (start < floor) start = floor;
+
+  const dates = [];
+  for (let d = today; d >= start; d = shift(d, -1)) dates.push(d);
+
+  historyBody.innerHTML = "";
+  if (!Object.keys(plan).length && !logged.length){
+    historyBody.innerHTML = `<div class="empty"><p>No days logged yet. Once you start ticking things off, they show up here.</p></div>`;
+    return;
+  }
+
+  let currentMonth = "";
+  for (const date of dates){
+    const dt = fromISO(date);
+    const key = `${MON[dt.getMonth()]} ${dt.getFullYear()}`;
+    if (key !== currentMonth){
+      currentMonth = key;
+      const h = document.createElement("div");
+      h.className = "month";
+      h.textContent = `${MON3[dt.getMonth()]} ${dt.getFullYear()}`;
+      historyBody.appendChild(h);
+    }
+
+    const { done, total, items } = scoreFor(date);
+    const pct = total ? Math.round(done / total * 100) : 0;
+
+    const row = document.createElement("div");
+    row.className = "dayrow" + (date === today ? " is-today" : "") + (total && done === total ? " is-full" : "");
+    row.innerHTML = `<span class="d">${DOW3[dt.getDay()]} ${String(dt.getDate()).padStart(2,"0")}</span>
+                     <span class="pips"></span>
+                     <span class="pct">${total ? pct + "%" : "—"}</span>`;
+    const pips = row.querySelector(".pips");
+    for (const it of items){
+      const i = document.createElement("i");
+      i.className = "pip";
+      i.dataset.state = stateOf(it);
+      i.title = `${it.name}: ${fmt(it.value, it.unit)}/${fmt(it.target, it.unit)} ${UNITS[it.unit].label}`;
+      pips.appendChild(i);
+    }
+    row.addEventListener("click", () => { viewDate = date; selectTab("today"); });
+    row.style.cursor = "pointer";
+    historyBody.appendChild(row);
+  }
+}
+
+/* ============================================================
+   8. TABS, THEME, CONTROLS
+   ============================================================ */
+function renderTabs(){
+  const n = Object.keys(plan).length;
+  $("#planCount").textContent = n ? `(${n})` : "";
+}
+
+function selectTab(name){
+  activeTab = name;
+  for (const t of ["plan","today","history"]){
+    document.getElementById("tab-"+t).setAttribute("aria-selected", String(t === name));
+    document.getElementById("panel-"+t).hidden = (t !== name);
+  }
+  if (name === "today") renderToday();
+  if (name === "history") renderHistory();
+  if (name === "plan") renderPlan();
+}
+for (const t of ["plan","today","history"]){
+  document.getElementById("tab-"+t).addEventListener("click", () => selectTab(t));
+}
+
+const THEMES = ["system","light","dark"];
+function applyTheme(){
+  document.documentElement.dataset.theme = theme;
+  $("#themeBtn").textContent = "Theme: " + theme[0].toUpperCase() + theme.slice(1);
+}
+$("#themeBtn").addEventListener("click", () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  applyTheme(); Store.set("tally.theme", theme);
+});
+
+$("#prevDay").addEventListener("click", () => { viewDate = shift(viewDate, -1); renderToday(); });
+$("#nextDay").addEventListener("click", () => { if (viewDate < todayISO()){ viewDate = shift(viewDate, 1); renderToday(); } });
+$("#jumpToday").addEventListener("click", () => { viewDate = todayISO(); renderToday(); });
+
+// custom exercise
+const cUnit = $("#cUnit");
+for (const [k,v] of Object.entries(UNITS)){
+  const o = document.createElement("option");
+  o.value = k; o.textContent = v.label;
+  cUnit.appendChild(o);
+}
+$("#cAdd").addEventListener("click", () => {
+  const name = $("#cName").value.trim();
+  const unit = cUnit.value;
+  const target = Number($("#cTarget").value);
+  if (!name){ $("#cName").focus(); return; }
+  if (!(target > 0)){ $("#cTarget").focus(); return; }
+  const id = "c_" + name.toLowerCase().replace(/[^a-z0-9]+/g,"_") + "_" + Math.random().toString(36).slice(2,6);
+  plan[id] = { id, name, unit, target, cat:"Your own", custom:true };
+  $("#cName").value = "";
+  save(); renderPlan(); renderTabs();
+  document.querySelector(".addbox").scrollIntoView({ behavior:"smooth", block:"center" });
+});
+$("#cName").addEventListener("keydown", e => { if (e.key === "Enter") $("#cAdd").click(); });
+
+$("#exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ plan, log, exported: new Date().toISOString() }, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `tally-${todayISO()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("#clearBtn").addEventListener("click", async () => {
+  if (!confirm("Delete your plan and every logged day? This cannot be undone.")) return;
+  plan = {}; log = {};
+  await Store.clear();
+  renderPlan(); renderTabs(); selectTab("plan");
+});
+
+document.addEventListener("keydown", e => {
+  if (activeTab !== "today" || e.target.matches("input,select,textarea")) return;
+  if (e.key === "ArrowLeft") $("#prevDay").click();
+  if (e.key === "ArrowRight") $("#nextDay").click();
+});
+
+/* ============================================================
+   9. BOOT
+   ============================================================ */
+(async function init(){
+  theme = (await Store.get("tally.theme")) || "system";
+  applyTheme();
+  plan = (await Store.get("tally.plan")) || {};
+  log  = (await Store.get("tally.log"))  || {};
+
+  // first run: a sensible starter plan rather than an empty screen
+  if (!Object.keys(plan).length && !Object.keys(log).length){
+    for (const id of ["pushups","pullups","situps","squats","plank","jogging","stretch","water"]){
+      const p = PRESETS.find(x => x.id === id);
+      plan[id] = { id:p.id, name:p.name, unit:p.unit, target:p.target, cat:p.cat, custom:false };
+    }
+    save();
+  }
+  renderTabs();
+  selectTab("plan");
+})();
+
+})();
+</script>
+</body>
+</html>

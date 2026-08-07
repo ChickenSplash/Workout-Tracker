@@ -510,7 +510,10 @@ const CATS = ["Bodyweight","Weights","Cardio","Recovery & habits","Your own"];
 
 /* ============================================================
    3. STATE
-   plan[id] = { id, name, unit, target, cat, custom }
+   plan[id] = { id, name, unit, target, cat, custom, since }
+     since = "YYYY-MM-DD", the day the exercise joined the plan. Days before
+             it are never judged against it, so adding something today can't
+             retroactively spoil a day you already finished.
    log["YYYY-MM-DD"][id] = { v: doneAmount, t: targetAtTheTime }
    ============================================================ */
 let plan = {};
@@ -538,25 +541,32 @@ function fmt(v, unit){
 }
 
 /* ── day maths ──────────────────────────────────────────── */
-// Returns the set of items relevant to a date: everything in the plan now,
-// plus anything that was logged that day but has since left the plan.
+// Returns the set of items relevant to a date, in three bands:
+//   1. in scope — plan items that had already joined the plan by that date,
+//      plus anything logged that day (logging something puts it in scope)
+//   2. retired  — logged that day, since removed from the plan
+//   3. later    — plan items added after that date. Shown so you can still
+//      back-fill them, but they don't count for or against the day's score.
 function itemsFor(date){
   const day = log[date] || {};
-  const out = [];
+  const out = [], later = [], retired = [];
   const seen = new Set();
   for (const id of Object.keys(plan)){
     const p = plan[id], e = day[id];
-    out.push({ id, name:p.name, unit:p.unit, target: e ? e.t : p.target, value: e ? e.v : 0 });
+    const it = { id, name:p.name, unit:p.unit, target: e ? e.t : p.target, value: e ? e.v : 0 };
+    // an entry in the log is proof it applied that day, whatever `since` says
+    if (!e && p.since && date < p.since){ it.outOfScope = true; later.push(it); }
+    else out.push(it);
     seen.add(id);
   }
   for (const id of Object.keys(day)){
     if (seen.has(id)) continue;
     const e = day[id];
     const known = PRESETS.find(p => p.id === id);
-    out.push({ id, name: e.n || (known ? known.name : id), unit: e.u || (known ? known.unit : "reps"),
-               target: e.t, value: e.v, retired:true });
+    retired.push({ id, name: e.n || (known ? known.name : id), unit: e.u || (known ? known.unit : "reps"),
+                   target: e.t, value: e.v, retired:true });
   }
-  return out;
+  return out.concat(retired, later);
 }
 function stateOf(it){
   if (it.value >= it.target && it.target > 0) return "done";
@@ -565,8 +575,9 @@ function stateOf(it){
 }
 function scoreFor(date){
   const items = itemsFor(date);
-  const done = items.filter(i => stateOf(i) === "done").length;
-  return { done, total: items.length, items };
+  const counted = items.filter(i => !i.outOfScope);
+  const done = counted.filter(i => stateOf(i) === "done").length;
+  return { done, total: counted.length, items };
 }
 
 /* ── streaks ────────────────────────────────────────────── */
@@ -652,7 +663,8 @@ function renderPlan(){
 
       li.querySelector(".mark").addEventListener("click", () => {
         if (plan[item.id]) delete plan[item.id];
-        else plan[item.id] = { id:item.id, name:item.name, unit, target, cat:item.cat, custom:!!item.custom };
+        else plan[item.id] = { id:item.id, name:item.name, unit, target, cat:item.cat,
+                               custom:!!item.custom, since: todayISO() };
         save(); renderPlan(); renderTabs();
       });
 
@@ -712,19 +724,26 @@ function renderToday(){
     const u = UNITS[it.unit];
     const st = stateOf(it);
 
-    const pip = document.createElement("i");
-    pip.dataset.state = st;
-    seg.appendChild(pip);
+    let pip = null;
+    if (!it.outOfScope){
+      pip = document.createElement("i");
+      pip.dataset.state = st;
+      seg.appendChild(pip);
+    }
+
+    const note = it.retired ? " · removed from plan"
+               : it.outOfScope ? " · not in your plan then"
+               : "";
 
     const li = document.createElement("li");
-    li.className = "row" + (st === "done" ? " is-done" : st === "part" ? " is-part" : "");
+    li.className = "row" + (it.outOfScope ? " is-off" : st === "done" ? " is-done" : st === "part" ? " is-part" : "");
     li.innerHTML = `
       <button class="mark" data-state="${st}" aria-pressed="${st === "done"}" aria-label="Mark ${it.name} done">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.8 9.5 18.5 20 6"/></svg>
       </button>
       <div>
         <span class="ex-name">${it.name}</span>
-        <span class="ex-sub">target ${fmt(it.target, it.unit)} ${u.label}${it.retired ? " · removed from plan" : ""}</span>
+        <span class="ex-sub">target ${fmt(it.target, it.unit)} ${u.label}${note}</span>
       </div>
       <div class="setter">
         <input type="range" min="0" max="${Math.max(u.max, it.target)}" step="${u.step}" value="${it.value}"
@@ -754,7 +773,7 @@ function renderToday(){
       const s = v >= it.target && it.target > 0 ? "done" : v > 0 ? "part" : "todo";
       li.className = "row" + (s === "done" ? " is-done" : s === "part" ? " is-part" : "");
       li.querySelector(".mark").dataset.state = s;
-      pip.dataset.state = s;
+      if (pip) pip.dataset.state = s;
     });
     range.addEventListener("change", () => { it.value = Number(range.value); write(Number(range.value), true); });
 
@@ -811,6 +830,7 @@ function renderHistory(){
                      <span class="pct">${total ? pct + "%" : "—"}</span>`;
     const pips = row.querySelector(".pips");
     for (const it of items){
+      if (it.outOfScope) continue;
       const i = document.createElement("i");
       i.className = "pip";
       i.dataset.state = stateOf(it);
@@ -873,7 +893,7 @@ $("#cAdd").addEventListener("click", () => {
   if (!name){ $("#cName").focus(); return; }
   if (!(target > 0)){ $("#cTarget").focus(); return; }
   const id = "c_" + name.toLowerCase().replace(/[^a-z0-9]+/g,"_") + "_" + Math.random().toString(36).slice(2,6);
-  plan[id] = { id, name, unit, target, cat:"Your own", custom:true };
+  plan[id] = { id, name, unit, target, cat:"Your own", custom:true, since: todayISO() };
   $("#cName").value = "";
   save(); renderPlan(); renderTabs();
   document.querySelector(".addbox").scrollIntoView({ behavior:"smooth", block:"center" });
@@ -910,11 +930,20 @@ document.addEventListener("keydown", e => {
   plan = (await Store.get("tally.plan")) || {};
   log  = (await Store.get("tally.log"))  || {};
 
+  // Saves made before `since` existed: anchor every item to the first logged
+  // day, so existing history and streaks read exactly as they did before.
+  const firstLogged = Object.keys(log).sort()[0] || todayISO();
+  let migrated = false;
+  for (const p of Object.values(plan)){
+    if (!p.since){ p.since = firstLogged; migrated = true; }
+  }
+  if (migrated) save();
+
   // first run: a sensible starter plan rather than an empty screen
   if (!Object.keys(plan).length && !Object.keys(log).length){
     for (const id of ["pushups","pullups","situps","squats","plank","jogging","stretch","water"]){
       const p = PRESETS.find(x => x.id === id);
-      plan[id] = { id:p.id, name:p.name, unit:p.unit, target:p.target, cat:p.cat, custom:false };
+      plan[id] = { id:p.id, name:p.name, unit:p.unit, target:p.target, cat:p.cat, custom:false, since: todayISO() };
     }
     save();
   }
